@@ -1,3 +1,4 @@
+--Now, I will create the “Region” table in the Silver Lakehouse using the PySpark code below. Don’t forget to copy the ABFS path from the Region CSV file in the Bronze Lakehouse ‘raw’ folder and use it here.
 --Change the ABFS path in the step 2
 
 # Create schema and perform data cleaning, transformation and load to delta table in Silver Lakehouse for Region table
