@@ -1,1 +1,51 @@
+--Next, the following SQL code creates the Dim_Region table in the warehouse.
 
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='Dim_Region' AND SCHEMA_NAME(schema_id)='dbo')
+BEGIN
+    CREATE TABLE dbo.Dim_Region (
+        SalesTerritoryKey VARCHAR(255) NOT NULL,
+        Region VARCHAR(255),
+        Country VARCHAR(255),
+        [Group] VARCHAR(255), -- "Group" is a reserved keyword, change to [Group]
+        DateInserted DATETIME2(3),  
+        SourceFilename VARCHAR(255)  
+    );
+ 
+    ALTER TABLE dbo.Dim_Region
+    ADD CONSTRAINT PK_Dim_Region PRIMARY KEY NONCLUSTERED (SalesTerritoryKey) NOT ENFORCED;
+END;
+GO
+
+--The SQL stored procedure below would create a logic to load the Dim_Region table.
+
+Copy to BlackBox
+CREATE OR ALTER PROCEDURE LoadDimRegion
+AS
+BEGIN
+    -- Load data into the Dim_Region table from the Silver Lakehouse
+    INSERT INTO Dim_Region (
+        SalesTerritoryKey,
+        Region,
+        Country,
+        [Group],
+        DateInserted,
+        SourceFilename
+    )
+    SELECT 
+        CAST(SalesTerritoryKey AS INT),
+        Region,
+        Country,
+        [Group],
+        GETUTCDATE() AS DateInserted,  -- Insert the current UTC timestamp
+        SourceFilename
+    FROM Cleansed_Silver.dbo.Region AS silver
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM Dim_Region AS dr 
+        WHERE dr.SalesTerritoryKey = silver.SalesTerritoryKey  -- Match on unique SalesTerritoryKey
+    );
+END;
+GO
+ 
+-- Execute the procedure
+EXEC LoadDimRegion;
