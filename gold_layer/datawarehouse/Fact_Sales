@@ -1,1 +1,78 @@
+-- The next SQL code creates the Fact_Sales table in the warehouse. 
+-- Note: I have not created any aggregations on the Fact_Sales table in this example. However, it’s common to create your Fact table to have new column names that are different from those coming from Silver tables to hold aggregations.
 
+IF NOT EXISTS (
+    SELECT * FROM sys.tables 
+    WHERE name = 'Fact_Sales' AND SCHEMA_NAME(schema_id) = 'dbo'
+)
+BEGIN
+    CREATE TABLE dbo.Fact_Sales (
+        SalesOrderNumber     VARCHAR(50) NOT NULL,
+        OrderDate            DATE NOT NULL,
+        ProductKey           INT NOT NULL,
+        SalesTerritoryKey    VARCHAR(255) NOT NULL,
+        OrderQuantity        INT NOT NULL,
+        UnitPrice            DECIMAL(18, 2) NOT NULL,
+        SalesAmount          DECIMAL(18, 2) NOT NULL,
+        TotalProductCost     DECIMAL(18, 2) NOT NULL,
+        DateInserted         DATETIME2(3),
+        SourceFilename       VARCHAR(4000)
+    );
+
+    -- Primary Key (composite)
+    ALTER TABLE dbo.Fact_Sales
+    ADD CONSTRAINT PK_Fact_Sales PRIMARY KEY NONCLUSTERED (
+        SalesOrderNumber,
+        ProductKey,
+        OrderDate
+    ) NOT ENFORCED;
+
+    -- Foreign Key to Dim_Product (not enforced)
+    ALTER TABLE dbo.Fact_Sales
+    ADD CONSTRAINT FK_FactSales_ProductKey
+    FOREIGN KEY (ProductKey)
+    REFERENCES dbo.Dim_Product(ProductKey)
+    NOT ENFORCED;
+
+    -- Foreign Key to Dim_Region (not enforced)
+    ALTER TABLE dbo.Fact_Sales
+    ADD CONSTRAINT FK_FactSales_SalesTerritoryKey
+    FOREIGN KEY (SalesTerritoryKey)
+    REFERENCES dbo.Dim_Region(SalesTerritoryKey)
+    NOT ENFORCED;
+END;
+GO
+
+-- Store Procedure
+
+CREATE OR ALTER PROCEDURE LoadFactSales
+AS
+BEGIN
+INSERT INTO dbo.Fact_Sales (
+        SalesOrderNumber,
+        OrderDate,
+        ProductKey,
+        SalesTerritoryKey,
+        OrderQuantity,
+        UnitPrice,
+        SalesAmount,
+        TotalProductCost,
+        DateInserted,
+        SourceFilename
+        )
+SELECT SalesOrderNumber,
+        CAST(OrderDate AS DATE),
+        ProductKey,
+        CAST(SalesTerritoryKey AS VARCHAR(255)),
+        OrderQuantity,
+        UnitPrice,
+        SalesAmount,
+        TotalProductCost,
+        CAST(DateInserted AS DATE),
+        SourceFilename
+FROM Cleansed_Silver.dbo.Sales
+END;
+GO
+ 
+-- Execute Stored PROC
+EXEC LoadFactSales;
