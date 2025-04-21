@@ -1,1 +1,61 @@
+//Next, I will create the Sales table in the Silver Lakehouse in delta format. The code below uses a sample UPSERT logic on the Sales table at this stage. But you could move this logic to when you load to the Warehouse (Gold Layer).
+-- Change the ABFS path in step 2
 
+# Create Schema and perform data transformation, cleaning and upsert logic on Sales table
+ 
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, LongType, FloatType, TimestampType
+from pyspark.sql.functions import col, current_timestamp, input_file_name
+from delta.tables import DeltaTable
+ 
+# Initialize Spark Session
+spark = SparkSession.builder.appName("SalesUpsert").getOrCreate()
+ 
+# Step 1: Define schema for the Sales table
+Sales_schema = StructType([
+    StructField("SalesOrderNumber", StringType(), True),
+    StructField("OrderDate", TimestampType(), True),  # Timestamp for OrderDate
+    StructField("ProductKey", LongType(), True),
+    StructField("SalesTerritoryKey", LongType(), True),
+    StructField("OrderQuantity", LongType(), True),
+    StructField("UnitPrice", FloatType(), True),
+    StructField("SalesAmount", FloatType(), True),
+    StructField("TotalProductCost", FloatType(), True)
+])
+ 
+# Step 2: Load Sales_Bronze CSV file from the Bronze Lakehouse
+bronze_path = "abfss://fab_ws_sales@onelake.dfs.fabric.microsoft.com/raw_Bronze.Lakehouse/Files/raw/Sales.csv"
+ 
+# Step 3: Load the CSV file with the defined schema
+bronze_sales_df = spark.read.format("csv")     .schema(Sales_schema)     .option("header", "true")     .option("delimiter", ",")     .load(bronze_path)
+ 
+# Step 4: Ensure correct data types and transformations
+bronze_sales_df = bronze_sales_df.withColumn("OrderDate", col("OrderDate").cast("timestamp"))
+ 
+# Step 5: Add metadata columns (DateInserted and SourceFilename)
+bronze_sales_df = bronze_sales_df.withColumn("DateInserted", current_timestamp())                                  .withColumn("SourceFilename", input_file_name())
+ 
+# Step 6: Define path for the Sales table in the Silver lakehouse
+silver_table_path = "Tables/Sales"  # This is where the new Sales table will be created in Silver Lakehouse
+ 
+# Step 7: Check if the Sales table already exists in Silver
+if DeltaTable.isDeltaTable(spark, silver_table_path):
+    # Load the existing Sales table as DeltaTable
+    silver_table = DeltaTable.forPath(spark, silver_table_path)
+ 
+# Step 8: Perform an upsert (MERGE) operation
+    silver_table.alias("silver").merge(
+        bronze_sales_df.alias("bronze"),
+        """
+        silver.SalesOrderNumber = bronze.SalesOrderNumber AND
+        silver.OrderDate = bronze.OrderDate AND
+        silver.ProductKey = bronze.ProductKey AND
+        silver.SalesTerritoryKey = bronze.SalesTerritoryKey
+        """
+    ).whenMatchedUpdateAll(
+        condition="silver.OrderQuantity != bronze.OrderQuantity OR                    silver.UnitPrice != bronze.UnitPrice OR                    silver.SalesAmount != bronze.SalesAmount OR                    silver.TotalProductCost != bronze.TotalProductCost"
+    ).whenNotMatchedInsertAll().execute()
+else:
+ 
+# Step 9: If the table does not exist, create it with the Bronze data
+    bronze_sales_df.write.format("delta").mode("overwrite").save(silver_table_path)
