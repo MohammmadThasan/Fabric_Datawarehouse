@@ -1,1 +1,64 @@
+--Create Table in Warehouse
+--The SQL code below is used to create the Dim_Product table in the warehouse. Please note that this table creation code is for demonstration purposes only; it can be further refined.
 
+Copy to BlackBox
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='Dim_Product' AND SCHEMA_NAME(schema_id)='dbo')
+BEGIN
+    CREATE TABLE dbo.Dim_Product (
+        ProductKey INT NOT NULL,
+        Product VARCHAR(255) NOT NULL,
+        Standard_Cost FLOAT NOT NULL,
+        Color VARCHAR(255),
+        Subcategory VARCHAR(255),
+        Category VARCHAR(255),
+        Background_Color_Format VARCHAR(255),
+        Font_Color_Format VARCHAR(255),
+        DateInserted DATETIME2(3),  -- Define precision for fractional seconds
+        SourceFilename VARCHAR(4000)
+    );
+    ALTER TABLE dbo.Dim_Product
+    ADD CONSTRAINT PK_Dim_Product PRIMARY KEY NONCLUSTERED (ProductKey) NOT ENFORCED;
+END;
+GO
+
+-- The SQL code below creates a Stored Procedure to load the Dim_Product table.
+
+Copy to BlackBox
+CREATE OR ALTER PROCEDURE LoadDimProduct
+AS
+BEGIN
+    -- Load data into the Dim_Product table from the Silver Lakehouse
+    INSERT INTO Dim_Product (
+        ProductKey,
+        Product,
+        Standard_Cost,
+        Color,
+        Subcategory,
+        Category,
+        Background_Color_Format,
+        Font_Color_Format,
+        DateInserted,
+        SourceFilename
+    )
+    SELECT 
+        ProductKey,
+        Product,
+        Standard_Cost,
+        Color,
+        Subcategory,
+        Category,
+        Background_Color_Format,
+        Font_Color_Format,
+        GETUTCDATE() AS DateInserted,  -- Insert the current UTC timestamp
+        SourceFilename
+    FROM Cleansed_Silver.dbo.Product AS silver
+    WHERE NOT EXISTS (
+        SELECT 1 
+        FROM Dim_Product AS dp 
+        WHERE dp.ProductKey = silver.ProductKey  -- Match on unique ProductKey
+    );
+END;
+GO
+ 
+-- Execute the procedure
+EXEC LoadDimProduct;
