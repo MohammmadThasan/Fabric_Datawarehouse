@@ -1,1 +1,32 @@
+--Change the ABFS path in the step 2
 
+# Create schema and perform data cleaning, transformation and load to delta table in Silver Lakehouse for Region table
+ 
+from pyspark.sql import *
+from pyspark.sql.types import *
+from pyspark.sql.functions import *
+ 
+# Initialize Spark Session
+spark = SparkSession.builder.appName("LakehouseData").getOrCreate()
+ 
+# Step 1: Define the schema
+table_name = 'Region'
+Region_schema = StructType([
+    StructField("SalesTerritoryKey", StringType(), True),  # Initially load as string
+    StructField("Region", StringType(), True),
+    StructField("Country", StringType(), True),
+    StructField("Group", StringType(), True)
+])
+ 
+# Step 2: Load the CSV file with the defined schema
+df = spark.read.format("csv")     .schema(Region_schema)     .option("header", "true")     .option("delimiter", "\t")     .load("abfss://fab_ws_sales@onelake.dfs.fabric.microsoft.com/raw_Bronze.Lakehouse/Files/raw/Region.csv")
+ 
+# Step 3: Ensure correct types for columns
+df = df.withColumn("SalesTerritoryKey", col("SalesTerritoryKey").cast("string"))
+ 
+# Step 4: Add new columns SourceFilename, DateInserted will contain the timestamp when the record was inserted
+df = df.withColumn("DateInserted", current_timestamp())
+df = df.withColumn("SourceFilename", input_file_name())
+ 
+# Step 5: Save the DataFrame as a Delta table
+df.write.mode("overwrite").option("mergeSchema", "true").format("delta").save("Tables/Region")
