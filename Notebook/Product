@@ -1,1 +1,38 @@
+--Need to change the ABFS (Azure Blob File System) from the table properties - ABFS Path
 
+# Create schema and perform data cleaning, transformation and load to delta table in Silver Lakehouse for Product table
+ 
+from pyspark.sql import *
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+ 
+# Initialize Spark Session
+spark = SparkSession.builder.appName("LakehouseData").getOrCreate()
+ 
+# Step 1: Define the schema for the Products table
+table_name = 'Product'
+Product_schema = StructType([
+    StructField("ProductKey", StringType(), True),
+    StructField("Product", StringType(), True),
+    StructField("Standard_Cost", StringType(), True),  # Load as string initially to clean
+    StructField("Color", StringType(), True),
+    StructField("Subcategory", StringType(), True),
+    StructField("Category", StringType(), True),
+    StructField("Background_Color_Format", StringType(), True),
+    StructField("Font_Color_Format", StringType(), True)
+])
+ 
+# Step 2: Load the CSV file with inferred schema and inspect columns
+df = spark.read.format("csv")     .option("header", "true")     .option("delimiter", "\t")     .load("abfss://fab_ws_sales@onelake.dfs.fabric.microsoft.com/raw_Bronze.Lakehouse/Files/raw/Product.csv")
+ 
+# Step 3: Rename columns to remove spaces/special characters
+df = df.withColumnRenamed("ProductKey", "ProductKey")        .withColumnRenamed("Product", "Product")        .withColumnRenamed("Standard Cost", "Standard_Cost")        .withColumnRenamed("Color", "Color")        .withColumnRenamed("Subcategory", "Subcategory")        .withColumnRenamed("Category", "Category")        .withColumnRenamed("Background Color Format", "Background_Color_Format")        .withColumnRenamed("Font Color Format", "Font_Color_Format")
+ 
+# Step 4: Clean and cast columns
+df = df.withColumn("Standard_Cost", regexp_replace(col("Standard_Cost"), "[^0-9.]", "").cast("float"))
+ 
+# Step 5: Add metadata columns
+df = df.withColumn("DateInserted", current_timestamp())        .withColumn("SourceFilename", input_file_name())
+ 
+# Step 6: Write as a Delta table to the Lakehouse
+df.write.mode("overwrite").option("mergeSchema", "true").format("delta").save("Tables/Product")
