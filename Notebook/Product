@@ -1,3 +1,4 @@
+--After copying the ABSF path, return to the “From Bronze to Silver” notebook and paste the copied path in the “Step 2” area in the code below.
 --Need to change the ABFS (Azure Blob File System) from the table properties - ABFS Path
 
 # Create schema and perform data cleaning, transformation and load to delta table in Silver Lakehouse for Product table
